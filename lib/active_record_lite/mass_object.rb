@@ -10,6 +10,7 @@ class MassObject < Accessibles
   end
 
   def self.parse_all(results)
+  	results.map{ |item| self.new(item) }
   end
 
   def initialize(params = {})

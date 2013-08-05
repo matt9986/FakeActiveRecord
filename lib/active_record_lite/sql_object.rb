@@ -4,6 +4,9 @@ require_relative './mass_object'
 require_relative './searchable'
 
 class SQLObject < MassObject
+  extend Searchable
+  extend Associatable
+
   def self.set_table_name(table_name)
     @table_name = table_name
   end
@@ -17,7 +20,7 @@ class SQLObject < MassObject
     SELECT *
     FROM #{table_name}
     SQL
-    array.map{|row_hash| self.new(row_hash)}
+    self.parse_all(array)
   end
 
   def self.find(id)
@@ -28,6 +31,16 @@ class SQLObject < MassObject
     SQL
     self.new(array.first)
   end
+
+  def save
+    if id.nil?
+      self.send(:create)
+    else
+      self.send(:update)
+    end
+  end
+
+  private
 
   def create
     question_marks = ["?"] * self.class.attributes.length
@@ -46,14 +59,6 @@ class SQLObject < MassObject
     SET #{ self.class.attributes.map{ |name| name.to_s + "= ?" }.join(", ") }
     WHERE id = #{ self.id }
     SQL
-  end
-
-  def save
-    if id.nil?
-      self.create
-    else
-      self.update
-    end
   end
 
   def attribute_values

@@ -4,21 +4,20 @@ require_relative './db_connection.rb'
 
 class AssocParams
   def other_class
-    @other_class
+    @other_class.constantize
   end
 
   def other_table
-    @other_table
+    other_class.table_name
   end
 end
 
 class BelongsToAssocParams < AssocParams
+  attr_reader :primary_key, :foreign_key
   def initialize(name, params)
-      other_class_name = params[:class_name] || name.to_s.camelize
-      primary_key = params[:primary_key] || "id"
-      foreign_key = params[:foreign_key] || name.to_s + "_id"
-      @other_class = other_class_name.constantize
-      @other_table = other_class.table_name
+      @other_class = params[:class_name] || name.to_s.camelize
+      @primary_key = params[:primary_key] || "id"
+      @foreign_key = params[:foreign_key] || name.to_s + "_id"
 
   end
 
@@ -47,15 +46,13 @@ module Associatable
       other_class_name = params[:class_name] || name.to_s.camelize
       primary_key = params[:primary_key] || "id"
       foreign_key = params[:foreign_key] || name.to_s + "_id"
-      other_class = other_class_name.constantize
-      other_table_name = other_class.table_name
 
       array = DBConnection.execute(<<-SQL, self.send(foreign_key.to_sym))
       SELECT *
-      FROM #{other_table_name}
+      FROM #{apc.other_table}
       WHERE #{primary_key} = ?
       SQL
-      other_class.parse_all(array).first
+      apc.other_class.parse_all(array).first
     end
   end
 
@@ -78,14 +75,17 @@ module Associatable
 
   def has_one_through(name, assoc1, assoc2)
     define_method(name) do
-      step_one = assoc_params[assoc1]
-      step_two = assoc_params[assoc2]
+      step_one = self.class.assoc_params[assoc1]
+      step_two = step_one.other_class.assoc_params[assoc2]
 
-      array = DBConnection.execute(<<-SQL, self.send(foreign_key.to_sym))
-      SELECT *
-      FROM #{other_table_name}
-      WHERE #{primary_key} = ?
+      array = DBConnection.execute(<<-SQL, self.send(step_one.foreign_key.to_sym))
+      SELECT second.*
+      FROM #{step_one.other_table} AS first
+      JOIN #{step_two.other_table} AS second
+      ON first.#{step_two.foreign_key} = second.#{step_two.primary_key}
+      WHERE first.#{step_one.primary_key} = ?
       SQL
-      other_class.parse_all(array).first
+      step_two.other_class.parse_all(array).first
+    end
   end
 end
